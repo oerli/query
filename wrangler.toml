@@ -1,7 +1,11 @@
-name = "{{project-name}}"
+name = "questionnaire"
 type = "javascript"
 workers_dev = true
 compatibility_date = "2022-01-20"
+
+kv_namespaces = [
+    { binding = "KV_QUESTIONS", id = "XXX", preview_id = "XXX" }
+]
 
 [vars]
 WORKERS_RS_VERSION = "0.0.9"
