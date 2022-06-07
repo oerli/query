@@ -37,23 +37,24 @@ impl Session {
 pub struct Question {
     question: String,
     answers: Vec<Answer>,
+    key: String,
 }
 
 impl Question {
     pub fn new(question: String, answers: Vec<Answer>) -> Question {
-        return Question { question: question, answers: answers }
+        return Question { question: question, answers: answers, key: rand::thread_rng().sample_iter(&Alphanumeric).take(6).map(char::from).collect::<String>() }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Answer {
     answer: String,
-    id: String,
+    key: String,
 }
 
 impl Answer {
     pub fn new(answer: String) -> Answer {
-        return Answer { answer: answer, id: rand::thread_rng().sample_iter(&Alphanumeric).take(6).map(char::from).collect::<String>() }
+        return Answer { answer: answer, key: rand::thread_rng().sample_iter(&Alphanumeric).take(6).map(char::from).collect::<String>() }
     }
 }
 
@@ -115,9 +116,9 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
 
             let session = Session::new(kv).await?;
 
-            let question: Question = req.json().await?;
-            kv.put(&session.session, question)?.execute().await?;
-
+            let questions: Vec<Question> = req.json().await?;
+            kv.put(&session.session, questions)?.execute().await?;
+            
             return Response::from_json(&session);
         })
         // get the questions from the id
@@ -125,7 +126,7 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
             let kv = &ctx.data;
             
             if let Some(session) = ctx.param("field") {
-                let question: Option<Question> = kv.get(&session).json().await?;
+                let question: Option<Vec<Question>> = kv.get(&session).json().await?;
                 match question {
                     Some(q) => {
                         return Response::from_json(&q);
@@ -141,10 +142,11 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
         .post_async("/v/:field", |mut req, ctx| async move {
             let kv = &ctx.data;
             
+            //TODO: update votes for each question? or use question id's?
             let votes: Vec<Vote> = req.json().await?;
-            if let Some(question) = ctx.param("field") {
+            if let Some(questions) = ctx.param("field") {
                 let session = rand::thread_rng().sample_iter(&Alphanumeric).take(6).map(char::from).collect::<String>();
-                kv.put(&format!("{}:{}", question, session), votes)?.execute().await?;
+                kv.put(&format!("{}:{}", questions, session), votes)?.execute().await?;
             }
             Response::error("Not Acceptable", 406)
         })
@@ -152,8 +154,9 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
         .get_async("/r/:field", |_, ctx| async move {
             let kv = &ctx.data;
             
-            if let Some(question) = ctx.param("field") {
-                let list = kv.list().prefix(format!("{}:", question)).execute().await?;
+            if let Some(session) = ctx.param("field") {
+                let questions: Option<Vec<Question>> = kv.get(&session).json().await?;
+                let list = kv.list().prefix(format!("{}:", session)).execute().await?;
                 
                 let mut results: HashMap<String, HashMap<String, u16>> = HashMap::new();
 
