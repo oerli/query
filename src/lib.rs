@@ -92,6 +92,10 @@ fn log_request(req: &Request) {
     );
 }
 
+const GUI_URL: &str = "http://127.0.0.1:8080";
+
+const KV_TTL: u64 = 2592000;
+
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Response> {
     log_request(&req);    
@@ -109,49 +113,58 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
     // Add as many routes as your Worker needs! Each route will get a `Request` for handling HTTP
     // functionality and a `RouteContext` which you can use to  and get route parameters and
     // Environment bindings like KV Stores, Durable Objects, Secrets, and Variables.
+
     router
+        .options_async("/q", |_, _| async move {
+            let cors = Cors::with_origins(Cors::new(), vec![GUI_URL]).with_methods(vec![Method::Get, Method::Options, Method::Post]).with_allowed_headers(vec!["Origin", "X-Requested-With", "Content-Type", "Accept"]);
+            return Response::empty()?.with_cors(&cors);
+        })
         // create a question and receive the session id
         .post_async("/q", |mut req, ctx| async move {
+            let cors = &Cors::with_origins(Cors::new(), vec![GUI_URL]).with_methods(vec![Method::Get, Method::Options, Method::Post]).with_allowed_headers(vec!["Origin", "X-Requested-With", "Content-Type", "Accept"]);
             let kv = &ctx.data;
 
             let session = Session::new(kv).await?;
 
             let questions: Vec<Question> = req.json().await?;
-            kv.put(&session.session, questions)?.execute().await?;
+            kv.put(&session.session, questions)?.expiration_ttl(KV_TTL).execute().await?;
             
-            return Response::from_json(&session);
+            return Response::from_json(&session)?.with_cors(&cors);
         })
         // get the questions from the id
         .get_async("/q/:field", |_, ctx| async move {
+            let cors = &Cors::with_origins(Cors::new(), vec![GUI_URL]).with_methods(vec![Method::Get, Method::Options, Method::Post]).with_allowed_headers(vec!["Origin", "X-Requested-With", "Content-Type", "Accept"]);
             let kv = &ctx.data;
             
             if let Some(session) = ctx.param("field") {
                 let question: Option<Vec<Question>> = kv.get(&session).json().await?;
                 match question {
                     Some(q) => {
-                        return Response::from_json(&q);
+                        return Response::from_json(&q)?.with_cors(&cors);
                     },
                     None => {
-                        return Response::error("Not Acceptable", 406);
+                        return Response::error("Not Acceptable", 406)?.with_cors(&cors);
                     }
                 }
             }
-            return Response::error("Not Found", 401);
+            return Response::error("Not Found", 401)?.with_cors(&cors);
         })
         // vote for a question
         .post_async("/v/:field", |mut req, ctx| async move {
+            let cors = &Cors::with_origins(Cors::new(), vec![GUI_URL]).with_methods(vec![Method::Get, Method::Options, Method::Post]).with_allowed_headers(vec!["Origin", "X-Requested-With", "Content-Type", "Accept"]);
             let kv = &ctx.data;
             
             //TODO: update votes for each question? or use question id's?
             let votes: Vec<Vote> = req.json().await?;
             if let Some(questions) = ctx.param("field") {
                 let session = rand::thread_rng().sample_iter(&Alphanumeric).take(6).map(char::from).collect::<String>();
-                kv.put(&format!("{}:{}", questions, session), votes)?.execute().await?;
+                kv.put(&format!("{}:{}", questions, session), votes)?.expiration_ttl(KV_TTL).execute().await?;
             }
-            Response::error("Not Acceptable", 406)
+            Response::error("Not Acceptable", 406)?.with_cors(&cors)
         })
         // display the results of the votes
         .get_async("/r/:field", |_, ctx| async move {
+            let cors = &Cors::with_origins(Cors::new(), vec![GUI_URL]).with_methods(vec![Method::Get, Method::Options, Method::Post]).with_allowed_headers(vec!["Origin", "X-Requested-With", "Content-Type", "Accept"]);
             let kv = &ctx.data;
             
             if let Some(session) = ctx.param("field") {
@@ -192,10 +205,10 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
                     }
                 }
                 
-                return Response::from_json(&results);
+                return Response::from_json(&results)?.with_cors(&cors);
                 
             }
-            return Response::error("Not Found", 401);
+            return Response::error("Not Found", 401)?.with_cors(&cors);
         })
         .get("/worker-version", |_, ctx| {
             let version = ctx.var("WORKERS_RS_VERSION")?.to_string();
