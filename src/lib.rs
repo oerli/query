@@ -210,7 +210,7 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
                                             },
                                             None => {
                                                 let mut count: HashMap<String, u16> = HashMap::new();
-                                                count.insert(k.clone(), 1);
+                                                count.insert(vote.vote, 1);
         
                                                 results.insert(k.clone(), count);
                                             }
