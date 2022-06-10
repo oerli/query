@@ -60,13 +60,14 @@ impl Answer {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Vote {
-    answer: String,
-    vote: String
+    pub vote: String,
+    pub answer_key: Option<String>,
+    pub question_key: Option<String>,
 }
 
 impl Vote {
     pub fn new(answer: String, vote: String) -> Vote {
-        return Vote { answer: answer, vote: vote }
+        return Vote { vote: vote, answer_key: None, question_key: None }
     }
 }
 
@@ -92,7 +93,7 @@ fn log_request(req: &Request) {
     );
 }
 
-const GUI_URL: &str = "http://127.0.0.1:8080";
+const GUI_URL: &str = "http://localhost:8080";
 
 const KV_TTL: u64 = 2592000;
 
@@ -115,12 +116,12 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
     // Environment bindings like KV Stores, Durable Objects, Secrets, and Variables.
 
     router
-        .options_async("/q", |_, _| async move {
+        .options_async("/question", |_, _| async move {
             let cors = Cors::with_origins(Cors::new(), vec![GUI_URL]).with_methods(vec![Method::Get, Method::Options, Method::Post]).with_allowed_headers(vec!["Origin", "X-Requested-With", "Content-Type", "Accept"]);
             return Response::empty()?.with_cors(&cors);
         })
         // create a question and receive the session id
-        .post_async("/q", |mut req, ctx| async move {
+        .post_async("/question", |mut req, ctx| async move {
             let cors = &Cors::with_origins(Cors::new(), vec![GUI_URL]).with_methods(vec![Method::Get, Method::Options, Method::Post]).with_allowed_headers(vec!["Origin", "X-Requested-With", "Content-Type", "Accept"]);
             let kv = &ctx.data;
 
@@ -132,7 +133,7 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
             return Response::from_json(&session)?.with_cors(&cors);
         })
         // get the questions from the id
-        .get_async("/q/:field", |_, ctx| async move {
+        .get_async("/question/:field", |_, ctx| async move {
             let cors = &Cors::with_origins(Cors::new(), vec![GUI_URL]).with_methods(vec![Method::Get, Method::Options, Method::Post]).with_allowed_headers(vec!["Origin", "X-Requested-With", "Content-Type", "Accept"]);
             let kv = &ctx.data;
             
@@ -149,21 +150,34 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
             }
             return Response::error("Not Found", 401)?.with_cors(&cors);
         })
+        .options_async("/vote/:field", |_, _| async move {
+            let cors = Cors::with_origins(Cors::new(), vec![GUI_URL]).with_methods(vec![Method::Get, Method::Options, Method::Post]).with_allowed_headers(vec!["Origin", "X-Requested-With", "Content-Type", "Accept"]);
+            return Response::empty()?.with_cors(&cors);
+        })
         // vote for a question
-        .post_async("/v/:field", |mut req, ctx| async move {
+        .post_async("/vote/:field", |mut req, ctx| async move {
             let cors = &Cors::with_origins(Cors::new(), vec![GUI_URL]).with_methods(vec![Method::Get, Method::Options, Method::Post]).with_allowed_headers(vec!["Origin", "X-Requested-With", "Content-Type", "Accept"]);
             let kv = &ctx.data;
             
             //TODO: update votes for each question? or use question id's?
             let votes: Vec<Vote> = req.json().await?;
-            if let Some(questions) = ctx.param("field") {
-                let session = rand::thread_rng().sample_iter(&Alphanumeric).take(6).map(char::from).collect::<String>();
-                kv.put(&format!("{}:{}", questions, session), votes)?.expiration_ttl(KV_TTL).execute().await?;
+            console_debug!("{:?}", votes);
+            if let Some(question_session) = ctx.param("field") {
+                let answer_session = rand::thread_rng().sample_iter(&Alphanumeric).take(6).map(char::from).collect::<String>();
+                let session = Session{session: format!("{}:{}", question_session, answer_session)};
+                
+                kv.put(&session.session, votes)?.expiration_ttl(KV_TTL).execute().await?;
+                return Response::from_json(&session)?.with_cors(&cors);
+            } else {
+                Response::error("Not Acceptable", 406)?.with_cors(&cors)
             }
-            Response::error("Not Acceptable", 406)?.with_cors(&cors)
+        })
+        .options_async("/result", |_, _| async move {
+            let cors = Cors::with_origins(Cors::new(), vec![GUI_URL]).with_methods(vec![Method::Get, Method::Options, Method::Post]).with_allowed_headers(vec!["Origin", "X-Requested-With", "Content-Type", "Accept"]);
+            return Response::empty()?.with_cors(&cors);
         })
         // display the results of the votes
-        .get_async("/r/:field", |_, ctx| async move {
+        .get_async("/result/:field", |_, ctx| async move {
             let cors = &Cors::with_origins(Cors::new(), vec![GUI_URL]).with_methods(vec![Method::Get, Method::Options, Method::Post]).with_allowed_headers(vec!["Origin", "X-Requested-With", "Content-Type", "Accept"]);
             let kv = &ctx.data;
             
@@ -179,26 +193,34 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
                     match votes {
                         Some(v) => {
                             for vote in v {
-                                match results.get_mut(&vote.answer) {
-                                    Some(c) => {
-                                        match c.get(&vote.vote) {
-                                            Some(x) => {
-                                                let i = x + 1;
-                                                c.insert(vote.vote, i);
+                                match &vote.answer_key {
+                                    Some(k) => {
+                                        match results.get_mut(k) {
+                                            Some(c) => {
+                                                match c.get(&vote.vote) {
+                                                    Some(x) => {
+                                                        let i = x + 1;
+                                                        c.insert(vote.vote, i);
+                                                    },
+                                                    None => {
+                                                        c.insert(vote.vote, 1);
+                                                    }
+                                                }
+                                                
                                             },
                                             None => {
-                                                c.insert(vote.vote, 1);
+                                                let mut count: HashMap<String, u16> = HashMap::new();
+                                                count.insert(k.clone(), 1);
+        
+                                                results.insert(k.clone(), count);
                                             }
                                         }
-                                        
                                     },
                                     None => {
-                                        let mut count: HashMap<String, u16> = HashMap::new();
-                                        count.insert(vote.vote, 1);
-
-                                        results.insert(vote.answer, count);
+                                        todo!()
                                     }
                                 }
+                                
                             }
                         },
                         None => {}
