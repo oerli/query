@@ -72,6 +72,13 @@ impl Vote {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct Score {
+    pub questions: Vec<Question>,
+    pub votes: Vec<Vote>,
+}
+
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Count {
     answer: String,
     count: u16,
@@ -182,53 +189,23 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
             let kv = &ctx.data;
             
             if let Some(session) = ctx.param("field") {
-                let questions: Option<Vec<Question>> = kv.get(&session).json().await?;
-                let list = kv.list().prefix(format!("{}:", session)).execute().await?;
-                
-                let mut results: HashMap<String, HashMap<String, u16>> = HashMap::new();
-
-                for key in list.keys {
-                    let votes: Option<Vec<Vote>> = kv.get(&key.name).json().await?;
-                    
-                    match votes {
-                        Some(v) => {
-                            for vote in v {
-                                match &vote.answer_key {
-                                    Some(k) => {
-                                        match results.get_mut(k) {
-                                            Some(c) => {
-                                                match c.get(&vote.vote) {
-                                                    Some(x) => {
-                                                        let i = x + 1;
-                                                        c.insert(vote.vote, i);
-                                                    },
-                                                    None => {
-                                                        c.insert(vote.vote, 1);
-                                                    }
-                                                }
-                                                
-                                            },
-                                            None => {
-                                                let mut count: HashMap<String, u16> = HashMap::new();
-                                                count.insert(vote.vote, 1);
+                match kv.get(&session).json().await? {
+                    Some(questions) => {
+                        let mut votes: Vec<Vote> = Vec::new();
         
-                                                results.insert(k.clone(), count);
-                                            }
-                                        }
-                                    },
-                                    None => {
-                                        todo!()
-                                    }
-                                }
+                        let list = kv.list().prefix(format!("{}:", session)).execute().await?;
                                 
+                        for key in list.keys {
+                            match &mut kv.get(&key.name).json().await? {
+                                Some(v) => {votes.append(v);},
+                                None => {},
                             }
-                        },
-                        None => {}
-                    }
+                        }
+                        let score = Score{questions, votes};
+                        return Response::from_json(&score)?.with_cors(&cors);
+                    },
+                    None => ()
                 }
-                
-                return Response::from_json(&results)?.with_cors(&cors);
-                
             }
             return Response::error("Not Found", 401)?.with_cors(&cors);
         })
