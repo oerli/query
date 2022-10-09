@@ -1,10 +1,10 @@
-name = "questionnaire"
+name = "query"
 type = "javascript"
 workers_dev = true
 compatibility_date = "2022-01-20"
 
 kv_namespaces = [
-    { binding = "KV_QUESTIONS", id = "XXX", preview_id = "XXX" }
+    { binding = "KV_QUERY", id = "XXX", preview_id = "XXX" }
 ]
 
 [vars]

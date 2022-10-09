@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 use worker::*;
 use kv::*;
 
 use rand::{distributions::Alphanumeric, Rng};
+use chrono::Utc;
 
 mod utils;
 
@@ -18,6 +18,7 @@ pub enum Type {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Session {
     session: String,
+    lifetime: u64,
 }
 
 impl Session {
@@ -26,7 +27,8 @@ impl Session {
             let key = rand::thread_rng().sample_iter(&Alphanumeric).take(6).map(char::from).collect::<String>();
             if None == kv.get(&key).text().await? {
                 return Ok(Session{
-                    session: key
+                    session: key,
+                    lifetime: Utc::now().timestamp() as u64 + KV_TTL,
                 })
             }
         }
@@ -111,7 +113,7 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
     // Optionally, get more helpful error messages written to the console in the case of a panic.
     utils::set_panic_hook();
 
-    let kv = KvStore::from_this(&env, "KV_QUESTIONS")?;
+    let kv = KvStore::from_this(&env, "KV_QUERY")?;
 
     // Optionally, use the Router to handle matching endpoints, use ":name" placeholders, or "*name"
     // catch-alls to match on specific patterns. Alternatively, use `Router::with_data(D)` to
@@ -171,7 +173,7 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
             console_debug!("{:?}", votes);
             if let Some(question_session) = ctx.param("field") {
                 let answer_session = rand::thread_rng().sample_iter(&Alphanumeric).take(6).map(char::from).collect::<String>();
-                let session = Session{session: format!("{}:{}", question_session, answer_session)};
+                let session = Session{session: format!("{}:{}", question_session, answer_session), lifetime: 0};
                 
                 kv.put(&session.session, votes)?.expiration_ttl(KV_TTL).execute().await?;
                 return Response::from_json(&session)?.with_cors(&cors);

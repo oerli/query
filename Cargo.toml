@@ -1,5 +1,5 @@
 [package]
-name = "questionnaire"
+name = "query"
 version = "0.1.0"
 authors = ["Roland Mueller"]
 edition = "2018"
@@ -12,13 +12,14 @@ default = ["console_error_panic_hook"]
 
 [dependencies]
 cfg-if = "1.0.0"
-worker = "0.0.9"
-serde_json = "1.0.81"
+worker = "0.0.11"
+serde_json = "1.0.82"
 worker-kv = "0.5.1"
 serde = { version = "1.0.137", features = ["derive"] }
-getrandom = { version = "0.2.6", features = ["js"] }
+getrandom = { version = "0.2.7", features = ["js"] }
 rand = "0.8.5"
-handlebars = "4.2.2"
+handlebars = "4.3.1"
+chrono = "0.4.22"
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
