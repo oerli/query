@@ -9,10 +9,16 @@ use chrono::Utc;
 mod utils;
 
 
-#[derive(Serialize, Deserialize, Debug)]
-pub enum Type {
-    Question{q: Question},
-    Vote,
+#[derive(Serialize, Deserialize, Default)]
+pub struct Questions {
+    questions: Vec<Question>,
+    options: QuestionOptions,
+    session: Option<Session>,
+}
+
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug, Default)]
+pub struct QuestionOptions {
+    pub title: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -136,7 +142,7 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
 
             let session = Session::new(kv).await?;
 
-            let questions: Vec<Question> = req.json().await?;
+            let questions: Questions = req.json().await?;
             kv.put(&session.session, questions)?.expiration_ttl(KV_TTL).execute().await?;
             
             return Response::from_json(&session)?.with_cors(&cors);
@@ -147,8 +153,8 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
             let kv = &ctx.data;
             
             if let Some(session) = ctx.param("field") {
-                let question: Option<Vec<Question>> = kv.get(&session).json().await?;
-                match question {
+                let questions: Option<Questions> = kv.get(&session).json().await?;
+                match questions {
                     Some(q) => {
                         return Response::from_json(&q)?.with_cors(&cors);
                     },
