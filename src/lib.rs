@@ -10,7 +10,7 @@ mod utils;
 
 
 #[derive(Serialize, Deserialize, Default)]
-pub struct Questions {
+pub struct Questionnaire {
     questions: Vec<Question>,
     options: QuestionOptions,
     session: Option<Session>,
@@ -108,7 +108,8 @@ fn log_request(req: &Request) {
     );
 }
 
-const GUI_URL: &str = "http://localhost:8080";
+const GUI_URL: &str = "https://query.rs";
+// const GUI_URL: &str = "http://localhost:8080";
 
 const KV_TTL: u64 = 2592000;
 
@@ -142,8 +143,8 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
 
             let session = Session::new(kv).await?;
 
-            let questions: Questions = req.json().await?;
-            kv.put(&session.session, questions)?.expiration_ttl(KV_TTL).execute().await?;
+            let questionnaire: Questionnaire = req.json().await?;
+            kv.put(&session.session, questionnaire)?.expiration_ttl(KV_TTL).execute().await?;
             
             return Response::from_json(&session)?.with_cors(&cors);
         })
@@ -153,10 +154,10 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
             let kv = &ctx.data;
             
             if let Some(session) = ctx.param("field") {
-                let questions: Option<Questions> = kv.get(&session).json().await?;
-                match questions {
-                    Some(q) => {
-                        return Response::from_json(&q)?.with_cors(&cors);
+                let entry: Option<Questionnaire> = kv.get(&session).json().await?;
+                match entry {
+                    Some(questionnaire) => {
+                        return Response::from_json(&questionnaire)?.with_cors(&cors);
                     },
                     None => {
                         return Response::error("Not Acceptable", 406)?.with_cors(&cors);
@@ -197,8 +198,9 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
             let kv = &ctx.data;
             
             if let Some(session) = ctx.param("field") {
-                match kv.get(&session).json().await? {
-                    Some(questions) => {
+                let entry: Option<Questionnaire> = kv.get(&session).json().await?;
+                match entry {
+                    Some(questionnaire) => {
                         let mut votes: Vec<Vote> = Vec::new();
         
                         let list = kv.list().prefix(format!("{}:", session)).execute().await?;
@@ -209,6 +211,7 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
                                 None => {},
                             }
                         }
+                        let questions = questionnaire.questions;
                         let score = Score{questions, votes};
                         return Response::from_json(&score)?.with_cors(&cors);
                     },
