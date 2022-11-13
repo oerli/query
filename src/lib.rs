@@ -11,20 +11,20 @@ mod utils;
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct Questionnaire {
-    questions: Vec<Question>,
-    options: QuestionOptions,
-    session: Option<Session>,
+    pub questions: Vec<Question>,
+    pub options: QuestionnaireOptions,
+    pub session: Option<Session>,
 }
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug, Default)]
-pub struct QuestionOptions {
+pub struct QuestionnaireOptions {
     pub title: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct Session {
-    session: String,
-    lifetime: u64,
+    pub session: String,
+    pub lifetime: u64,
 }
 
 impl Session {
@@ -41,32 +41,41 @@ impl Session {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug, Default)]
 pub struct Question {
-    question: String,
-    answers: Vec<Answer>,
-    key: String,
+    pub question: String,
+    pub answers: Vec<Answer>,
+    pub key: String,
 }
 
 impl Question {
     pub fn new(question: String, answers: Vec<Answer>) -> Question {
         return Question { question: question, answers: answers, key: rand::thread_rng().sample_iter(&Alphanumeric).take(6).map(char::from).collect::<String>() }
     }
-}
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Answer {
-    answer: String,
-    key: String,
-}
-
-impl Answer {
-    pub fn new(answer: String) -> Answer {
-        return Answer { answer: answer, key: rand::thread_rng().sample_iter(&Alphanumeric).take(6).map(char::from).collect::<String>() }
+    pub fn empty() -> Question {
+        return Question { question: "".to_owned(), answers: vec![Answer::new()], key: rand::thread_rng().sample_iter(&Alphanumeric).take(6).map(char::from).collect::<String>() }
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug, Default)]
+pub struct Answer {
+    pub answer: String,
+    pub key: String,
+    pub vote: Option<Vote>,
+}
+
+impl Answer {
+    pub fn new() -> Self {
+        Self {
+            answer: "".to_owned(),
+            key: rand::thread_rng().sample_iter(&Alphanumeric).take(6).map(char::from).collect::<String>(),
+            vote: None,
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug, Default)]
 pub struct Vote {
     pub vote: String,
     pub answer_key: Option<String>,
@@ -108,8 +117,7 @@ fn log_request(req: &Request) {
     );
 }
 
-const GUI_URL: &str = "https://query.rs";
-// const GUI_URL: &str = "http://localhost:8080";
+const GUI_URL: &str = "http://localhost:8080";
 
 const KV_TTL: u64 = 2592000;
 
